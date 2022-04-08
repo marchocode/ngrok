@@ -1,34 +1,96 @@
-## Ngrok 国内加速版本
+## NGROK 国内加速版本
+
+
 
 中文 / [English](./README.md)
 
 鉴于本人在自己的服务器搭建 `ngrok` 由于国内访问 GitHub 是出奇的慢，所以将一个已经完全可以直接编译的包分享出来，能快速搭建就快速搭建。
+
+
+
 原仓库地址： [https://github.com/inconshreveable/ngrok](https://github.com/inconshreveable/ngrok)
 
 国内fork仓库：https://gitee.com/mrc1999/ngrok
 
-### Get Start
+
+
+### 使用容器生成【推荐】
+
+直接在容器内生成客户端和服务端，无需额外安装环境
 
 ```bash
-# download
-wget https://gitee.com/mrc1999/ngrok/attach_files/776566/download/ngrok.tar
+# check docker version
+docker -v
 
-# check go version
-go version
-
-# tar
-tar -xf ngrok.tar
+# clone repository
+git clone https://gitee.com/mrc1999/ngrok.git
 
 cd ngrok
 
-# make default
-make release-server
-make release-client
+# set your domain
+export NGROK_DOMAIN=ngrok.example.com
+
+# build images
+docker build -t ngrok:1 --build-arg NGROK_DOMAIN=$NGROK_DOMAIN .
+
+# start docker
+docker run -d -v `pwd`/bin:/ngrok/bin --rm --name ngrok ngrok:1
+
+# test ngrokd
+bin/ngrokd -domain="$NGROK_DOMAIN"
 ```
 
 
 
-### Go语言环境准备
+```tex
+[root@VM-0-17-centos ngrok]# bin/ngrokd -domain="$NGROK_DOMAIN"
+[16:57:04 CST 2022/04/08] [INFO] (ngrok/log.(*PrefixLogger).Info:83) [registry] [tun] No affinity cache specified
+[16:57:04 CST 2022/04/08] [INFO] (ngrok/log.Info:112) Listening for public http connections on [::]:80
+[16:57:04 CST 2022/04/08] [INFO] (ngrok/log.Info:112) Listening for public https connections on [::]:443
+[16:57:04 CST 2022/04/08] [INFO] (ngrok/log.Info:112) Listening for control and proxy connections on [::]:4443
+[16:57:04 CST 2022/04/08] [INFO] (ngrok/log.(*PrefixLogger).Info:83) [metrics] Reporting every 30 seconds
+
+```
+
+
+
+### 使用物理机生成
+
+这种情况仅限于没有安装Docker的情况下使用，但需要有如下配置：
+
+- openssl
+- go 1.8 需要[手动安装]()
+- make
+
+```bash
+# clone
+git clone https://gitee.com/mrc1999/ngrok.git
+
+# check go version
+go version
+
+cd ngrok
+
+# set your domain
+export NGROK_DOMAIN=ngrok.example.com
+
+# make default
+sh ./build.sh
+```
+
+
+
+默认生成：
+
+1. LINUX 服务端 `bin/ngrokd`
+2. Windows 客户端 `bin/windows_amd64/ngrok.exe`
+3. Linux 客户端 `bin/ngrok`
+
+> 如需生成其他版本操作系统的版本，请修改 `build.sh` 参照 【如何编译不同系统的客户端】
+
+
+
+#### Go语言环境
 
 这里踩了几个坑，试过了好几个版本，最终发现 `go1.8 linux/amd64` 适合于当前的编译过程。
 
@@ -39,8 +101,6 @@ make release-client
 选择合适的架构包进行下载。我这里选择`1.8`
 
 > wget https://golang.google.cn/dl/go1.8.linux-amd64.tar.gz
-> 或者
-> wget https://gitee.com/mrc1999/ngrok/attach_files/870213/download/go1.8.linux-amd64.tar.gz
 
 
 ```bash
@@ -64,50 +124,7 @@ go version
 
 
 
-### 准备域名
-
-这里我们需要准备一个基础域名，例如：我的 `chaobei.xyz` 是我购买的域名，当然，我给它分配了一个三级域名 `ngrok.chaobei.xyz` 作为服务端的基础域名来使用。
-
-
-
-而客户端则在连接服务端的时候，可以指定一个域名前缀，例如：`test.ngrok.chaobei.xyz` . 当我们访问 `test.ngrok.chaobei.xyz`  就能访问到我内网的机器了。
-
-
-
-#### 添加 DNS 映射
-
-在你域名的服务商处，增加两条记录。还是按照我上面的域名为例。
-
-`ngrok` -------> 你服务器的IP
-
-`*.ngrok` -------> 你服务器的IP
-
-
-
-### 生成证书
-
-因为原有项目所带的证书为 `ngrok` 官方证书，不适合我们自定义域名使用，所以需要进行自签名证书，进行替换后使用。
-
-```bash
-# config ngrok domain
-NGROK_DOMAIN="ngrok.chaobei.xyz"
-
-# openssl ca
-openssl genrsa -out rootCA.key 2048
-openssl req -x509 -new -nodes -key rootCA.key -subj "/CN=$NGROK_DOMAIN" -days 5000 -out rootCA.pem
-openssl genrsa -out device.key 2048
-openssl req -new -key device.key -subj "/CN=$NGROK_DOMAIN" -out device.csr
-openssl x509 -req -in device.csr -CA rootCA.pem -CAkey rootCA.key -CAcreateserial -out device.crt -days 5000
-
-# cp owner ca
-cp rootCA.pem assets/client/tls/ngrokroot.crt
-cp device.key assets/server/tls/snakeoil.key
-cp device.crt assets/server/tls/snakeoil.crt
-```
-
-
-
-### 编译
+### 如何编译不同系统的客户端
 
 ```bash
 # make default (linux)
@@ -128,8 +145,29 @@ GOOS="windows" GOARCH="amd64" make release-client
 
 ```bash
 make release-server
+
 GOOS="linux" GOARCH="amd64" make release-client
 ```
+
+
+
+### 准备域名
+
+这里我们需要准备一个基础域名，例如：我的 `chaobei.xyz` 是我购买的域名，当然，我给它分配了一个三级域名 `ngrok.chaobei.xyz` 作为服务端的基础域名来使用。
+
+
+
+而客户端则在连接服务端的时候，可以指定一个域名前缀，例如：`test.ngrok.chaobei.xyz` . 当我们访问 `test.ngrok.chaobei.xyz`  就能访问到我内网的机器了。
+
+
+
+#### 添加 DNS 映射
+
+在你域名的服务商处，增加两条记录。还是按照我上面的域名为例。
+
+`ngrok` -------> 你服务器的IP
+
+`*.ngrok` -------> 你服务器的IP
 
 
 
@@ -185,3 +223,5 @@ https://github.com/inconshreveable/ngrok/blob/master/docs/SELFHOSTING.md
 https://gist.github.com/lyoshenka/002b7fbd801d0fd21f2f
 
 https://golang.org/doc/install/source#environment
+
+https://www.cnblogs.com/flhs/p/13194357.html
